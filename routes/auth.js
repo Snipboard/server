@@ -40,15 +40,23 @@ router.post('/login', async (req, res) => {
   try {
     const { email, rememberMe, password } = req.body;
     const user = await User.find({ email, password });
+    const isProduction = process.env.NODE_ENV === 'production';
+    const cookieConfig = {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'strict'
+    };
+
     if (user.length === 0) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
+
     if (rememberMe) {
       // If rememberMe is true, set a longer expiration time for the cookie
-      res.cookie('token', generateToken(user[0]), { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, secure: false, sameSite: 'strict' });
+      res.cookie('token', generateToken(user[0]), { maxAge: 30 * 24 * 60 * 60 * 1000, ...cookieConfig });
     } else {
       // If rememberMe is false, set a shorter expiration time for the cookie
-      res.cookie('token', generateToken(user[0]), { maxAge: 60 * 60 * 1000, httpOnly: true, secure: false, sameSite: 'strict' });
+      res.cookie('token', generateToken(user[0]), { maxAge: 60 * 60 * 1000, ...cookieConfig });
     }
     return res.status(200).json({ message: 'Login successful.', user: user[0] });
   } catch (err) {
@@ -75,8 +83,33 @@ router.get('/dashboard-data', authMiddleware, async (req, res) => {
 router.post('/logout', (req, res) => {
   try {
     // Clear the cookie by setting its maxAge to 0
-    res.cookie('token', '', { maxAge: 0, httpOnly: true, secure: false, sameSite: 'strict' });
+    const isProduction = process.env.NODE_ENV === 'production';
+    const cookieConfig = {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'strict'
+    };
+    res.cookie('token', '', { maxAge: 0, ...cookieConfig });
     return res.status(200).json({ message: 'Logout successful.' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/mobile-login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.find({ email, password });
+    if (user.length === 0) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    const token = generateToken(user[0]);
+    return res.status(200).json({
+      message: 'Login successful.',
+      user: user[0],
+      token: token
+    });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
